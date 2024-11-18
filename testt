@@ -1,192 +1,30 @@
-local OrionLib = loadstring(game:HttpGet(('https://raw.githubusercontent.com/shlexware/Orion/main/source')))()
-local Window = OrionLib:MakeWindow({Name = "Da Hood Aimlock Made By Blast", HidePremium = false, SaveConfig = true, ConfigFolder = "OrionTest"})
-
-OrionLib:MakeNotification({
-    Name = "Notification!!!",
-    Content = "Subscribe To Robloxblast On YT",
-    Image = "rbxassetid://4483345998",
-    Time = 5
-})
-
-local Tab = Window:MakeTab({
-    Name = "Main",
-    Icon = "rbxassetid://4483345998",
-    PremiumOnly = false
-})
-
--- Camlock Variables
-local isLocked = false
-local lockedPlayer = nil
-local predictionFactor = 0.165  -- Default prediction factor
-local lockBodyPart = "Head" -- Default body part to lock onto
-local camLockKey = Enum.KeyCode.C -- Default keybind for camlock
-local autoAir = false -- Default value for Auto Air
-local airDelay = 0.2 -- Default delay when the player is in the air
-
--- Silent Aim Variables
-local SilentAimEnabled = false
-local FOVRadius = 100  -- Default size of the FOV circle
-local FOVCircle -- Will initialize this later
-
 -- Services
 local Players = game:GetService("Players")
-local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
 local Camera = workspace.CurrentCamera
-local VirtualUser = game:GetService("VirtualUser")
-
--- Local player variables
 local LocalPlayer = Players.LocalPlayer
 local Mouse = LocalPlayer:GetMouse()
 
--- Camlock Functions
-local function showNotification(messageText, username)
-    OrionLib:MakeNotification({
-        Name = "Camlock Notification",
-        Content = messageText .. (username and " on " .. username or ""),
-        Image = "rbxassetid://4483345998",
-        Time = 5
-    })
-end
+-- Silent Aim Variables
+local SilentAimEnabled = enable
+local FOVRadius = 150  -- Default size of the FOV circle
+local FOVCircle
 
-local function isPlayerInAir(player)
-    if not player or not player.Character or not player.Character:FindFirstChild("Humanoid") then
-        return false
-    end
+-- Create GUI for Mobile Players
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "SilentAimGui"
+screenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
 
-    local humanoid = player.Character.Humanoid
-    local humanoidState = humanoid:GetState()
-
-    -- Print debug information
-    print("Player: " .. player.Name .. ", Humanoid State: " .. tostring(humanoidState))
-
-    -- Check if the player is in Freefall or Jumping state
-    return humanoidState == Enum.HumanoidStateType.Jumping or humanoidState == Enum.HumanoidStateType.Freefall
-end
-
-local function triggerVirtualUser()
-    local VU = VirtualUser
-    VU:CaptureController()
-    VU:ClickButton1(Vector2.new())
-end
-
-local function getPlayerInView()
-    local cameraPosition = Camera.CFrame.Position
-    local playersInView = {}
-
-    for _, player in ipairs(Players:GetPlayers()) do
-        if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-            local character = player.Character
-            local rootPart = character.HumanoidRootPart
-            local characterPosition = rootPart.Position
-            local screenPosition, onScreen = Camera:WorldToViewportPoint(characterPosition)
-
-            if onScreen then
-                local distance = (Vector2.new(screenPosition.X, screenPosition.Y) - Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)).Magnitude
-                table.insert(playersInView, {player = player, distance = distance})
-            end
-        end
-    end
-
-    if #playersInView > 0 then
-        table.sort(playersInView, function(a, b) return a.distance < b.distance end)
-        return playersInView[1].player
-    end
-
-    return nil
-end
-
-local function updateCamera()
-    if isLocked and lockedPlayer and lockedPlayer.Character and lockedPlayer.Character:FindFirstChild(lockBodyPart) then
-        local targetPosition = lockedPlayer.Character[lockBodyPart].Position
-        local cameraPosition = Camera.CFrame.Position
-
-        local velocity = lockedPlayer.Character:FindFirstChildOfClass("Humanoid") and lockedPlayer.Character:FindFirstChildOfClass("Humanoid").RootPart.Velocity or Vector3.new()
-        local predictedPosition = targetPosition + velocity * predictionFactor
-
-        local ray = Ray.new(cameraPosition, predictedPosition - cameraPosition)
-        local hitPart, hitPoint = workspace:FindPartOnRay(ray, LocalPlayer.Character)
-
-        if hitPart then
-            predictedPosition = cameraPosition + (predictedPosition - cameraPosition).Unit * (hitPoint - cameraPosition).Magnitude
-        end
-
-        Camera.CFrame = CFrame.new(cameraPosition, predictedPosition)
-
-        -- Check if the player is in the air and trigger VirtualUser with delay if Auto Air is enabled
-        if autoAir and isPlayerInAir(lockedPlayer) then
-            print("Player is in the air, waiting before triggering Auto Air")
-            wait(airDelay) -- Wait for the specified delay
-            print("Auto Air Triggered")
-            triggerVirtualUser()
-        else
-            print("Player is not in the air or Auto Air is disabled")
-        end
-    end
-end
-
-local function onInput(input, gameProcessed)
-    if gameProcessed then return end
-    if input.KeyCode == camLockKey then
-        isLocked = not isLocked
-        if isLocked then
-            lockedPlayer = getPlayerInView()
-            if lockedPlayer then
-                showNotification("Camlock Activated", lockedPlayer.Name)
-            else
-                isLocked = false
-                showNotification("No player in view to lock onto")
-            end
-        else
-            lockedPlayer = nil
-            showNotification("Camlock Deactivated")
-        end
-    end
-end
-
--- Silent Aim Functions
-local function ToggleSilentAim()
-    SilentAimEnabled = not SilentAimEnabled
-    if SilentAimEnabled then
-        if not FOVCircle then
-            FOVCircle = Drawing.new("Circle")
-            FOVCircle.Thickness = 1
-            FOVCircle.NumSides = 100
-            FOVCircle.Radius = FOVRadius
-            FOVCircle.Filled = false
-            FOVCircle.ZIndex = 999
-            FOVCircle.Color = Color3.fromRGB(255, 0, 0)
-        end
-        FOVCircle.Visible = true
-        isLocked = false -- Disable Camlock if Silent Aim is enabled
-        showNotification("Silent Aim Enabled, Camlock Disabled")
-    else
-        if FOVCircle then
-            FOVCircle.Visible = false
-        end
-        showNotification("Silent Aim Disabled")
-    end
-end
-
--- Keybinds
-UserInputService.InputBegan:Connect(function(input, gameProcessed)
-    if gameProcessed then return end
-    if input.KeyCode == Enum.KeyCode.T then
-        ToggleSilentAim()
-    elseif input.KeyCode == camLockKey then
-        onInput(input, gameProcessed)
-    end
-end)
-
--- Prediction
-local function GetPredictedPosition(character)
-    local rootPart = character:FindFirstChild("HumanoidRootPart")
-    if rootPart then
-        local velocity = rootPart.Velocity
-        return rootPart.Position + (velocity * predictionFactor)
-    end
-    return rootPart.Position
-end
+local toggleButton = Instance.new("TextButton")
+toggleButton.Name = "ToggleButton"
+toggleButton.Size = UDim2.new(0, 200, 0, 50)
+toggleButton.Position = UDim2.new(0, 10, 0, 10)
+toggleButton.BackgroundColor3 = Color3.fromRGB(255, 0, 0) -- Default color red
+toggleButton.Text = "Silent Aim: OFF"
+toggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+toggleButton.TextSize = 24
+toggleButton.Parent = screenGui
 
 -- Function to get closest player within FOV
 local function GetClosestPlayer()
@@ -197,7 +35,8 @@ local function GetClosestPlayer()
         if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
             local character = player.Character
             local screenPosition, onScreen = Camera:WorldToScreenPoint(character.HumanoidRootPart.Position)
-            local mouseDistance = (Vector2.new(screenPosition.X, screenPosition.Y) - UserInputService:GetMouseLocation()).Magnitude
+            local centerPosition = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+            local mouseDistance = (Vector2.new(screenPosition.X, screenPosition.Y) - centerPosition).Magnitude
 
             if mouseDistance < shortestDistance and onScreen then
                 shortestDistance = mouseDistance
@@ -207,6 +46,16 @@ local function GetClosestPlayer()
     end
 
     return closestPlayer
+end
+
+-- Function to get predicted position of a player
+local function GetPredictedPosition(character)
+    local rootPart = character:FindFirstChild("HumanoidRootPart")
+    if rootPart then
+        local velocity = rootPart.Velocity
+        return rootPart.Position + (velocity * 0.165)  -- Adjust prediction factor as needed
+    end
+    return rootPart.Position
 end
 
 -- Override raycasting to redirect aim with prediction
@@ -222,120 +71,52 @@ oldIndex = hookmetamethod(game, "__index", function(self, key)
     return oldIndex(self, key)
 end)
 
+-- Create FOV Circle for visualization
+if SilentAimEnabled then
+    FOVCircle = Drawing.new("Circle")
+    FOVCircle.Thickness = 1
+    FOVCircle.NumSides = 100
+    FOVCircle.Radius = FOVRadius
+    FOVCircle.Filled = false
+    FOVCircle.ZIndex = 999
+    FOVCircle.Color = Color3.fromRGB(255, 0, 0)
+    FOVCircle.Position = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)  -- Center the circle
+end
+
+-- Update FOV circle position
 RunService.RenderStepped:Connect(function()
     if SilentAimEnabled and FOVCircle then
-        -- Set the FOV circle position to the center of the screen
         FOVCircle.Position = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
-    end
-    if isLocked then
-        updateCamera()
     end
 end)
 
-
--- OrionLib UI Integration
-Tab:AddTextbox({
-    Name = "Set Prediction",
-    Default = tostring(predictionFactor),
-    TextDisappear = true,
-    Callback = function(Value)
-        local newPredictionFactor = tonumber(Value)
-        if newPredictionFactor then
-            predictionFactor = newPredictionFactor
-            LocalPlayer:SetAttribute("PredictionFactor", newPredictionFactor)
-            showNotification("Prediction Factor Set to " .. newPredictionFactor)
-        else
-            showNotification("Invalid Prediction Factor Value")
+-- Toggle Silent Aim function
+local function ToggleSilentAim(enabled)
+    SilentAimEnabled = enabled
+    if SilentAimEnabled then
+        if not FOVCircle then
+            FOVCircle = Drawing.new("Circle")
+            FOVCircle.Thickness = 1
+            FOVCircle.NumSides = 100
+            FOVCircle.Radius = FOVRadius
+            FOVCircle.Filled = false
+            FOVCircle.ZIndex = 999
+            FOVCircle.Color = Color3.fromRGB(255, 0, 0)
+            FOVCircle.Position = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
         end
-    end    
-})
-
-local function initializeAttributes()
-    if LocalPlayer:GetAttribute("PredictionFactor") == nil then
-        LocalPlayer:SetAttribute("PredictionFactor", predictionFactor)
+        FOVCircle.Visible = true
+        toggleButton.BackgroundColor3 = Color3.fromRGB(0, 255, 0) -- Green
+        toggleButton.Text = "Silent Aim: ON"
     else
-        predictionFactor = LocalPlayer:GetAttribute("PredictionFactor")
+        if FOVCircle then
+            FOVCircle.Visible = false
+        end
+        toggleButton.BackgroundColor3 = Color3.fromRGB(255, 0, 0) -- Red
+        toggleButton.Text = "Silent Aim: OFF"
     end
 end
 
-initializeAttributes()
-LocalPlayer.CharacterAdded:Connect(initializeAttributes)
-
-Tab:AddDropdown({
-    Name = "Choose Body Part",
-    Default = lockBodyPart,
-    Options = {"Head", "UpperTorso", "LowerTorso", "HumanoidRootPart"},
-    Callback = function(Value)
-        lockBodyPart = Value
-        showNotification("Lock Body Part Set to " .. lockBodyPart)
-    end    
-})
-
-Tab:AddTextbox({
-    Name = "Set Camlock Keybind",
-    Default = camLockKey.Name,
-    TextDisappear = true,
-    Callback = function(Value)
-        local newKey = Enum.KeyCode[Value]
-        if newKey then
-            camLockKey = newKey
-            showNotification("Camlock Keybind Set to " .. newKey.Name)
-        else
-            showNotification("Invalid Keybind")
-        end
-    end    
-})
-
-Tab:AddToggle({
-    Name = "Turn On Silent Aim",
-    Default = false,
-    Callback = function(Value)
-        SilentAimEnabled = Value
-        if Value then
-            if not FOVCircle then
-                FOVCircle = Drawing.new("Circle")
-                FOVCircle.Thickness = 1
-                FOVCircle.NumSides = 100
-                FOVCircle.Radius = FOVRadius
-                FOVCircle.Filled = false
-                FOVCircle.ZIndex = 999
-                FOVCircle.Color = Color3.fromRGB(255, 0, 0)
-            end
-            FOVCircle.Visible = false
-            isLocked = false -- Disable Camlock if Silent Aim is enabled
-            showNotification("Silent Aim Enabled")
-        else
-            if FOVCircle then
-                FOVCircle.Visible = false
-            end
-            showNotification("Silent Aim Disabled")
-        end
-    end    
-})
-
-Tab:AddToggle({
-    Name = "Enable FOV For Silent Aim",
-    Default = false,
-    Callback = function(Value)
-        if FOVCircle then
-            FOVCircle.Visible = SilentAimEnabled and Value
-        end
-    end    
-})
-
-Tab:AddSlider({
-    Name = "FOV Size",
-    Min = 50,
-    Max = 200,
-    Default = FOVRadius,
-    Color = Color3.new(0.631373, 0.000000, 0.000000),
-    Increment = 1,
-    ValueName = "FOV Radius",
-    Callback = function(Value)
-        FOVRadius = Value
-        if FOVCircle then
-            FOVCircle.Radius = FOVRadius
-        end
-        showNotification("FOV Size Set to " .. tostring(FOVRadius))
-    end    
-})
+-- Handle button click for toggling Silent Aim
+toggleButton.MouseButton1Click:Connect(function()
+    ToggleSilentAim(not SilentAimEnabled)
+end)
