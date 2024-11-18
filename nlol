@@ -1,170 +1,78 @@
-local OrionLib = loadstring(game:HttpGet('https://raw.githubusercontent.com/shlexware/Orion/main/source'))()
+local player = game.Players.LocalPlayer
+local mouse = player:GetMouse()
+local camera = game.Workspace.CurrentCamera
+local targetPlayer = nil
+local camlockActive = false
+local keybind = Enum.KeyCode.C  -- Change this keybind if needed
 
-local Xermon = {
-    Camlock = {Enabled = true, Spectate = false},
-    Fov = {Visible = true, Color = Color3.fromRGB(255, 255, 0), Transparency = 0.5, Size = 200, Filled = false}
-}
+-- Import OrionLib
+local OrionLib = require(game.ReplicatedStorage.OrionLib)
 
-local Players = game:GetService("Players")
-local Camera = game.Workspace.CurrentCamera
-local player = Players.LocalPlayer
-local target = nil
-
--- UI Setup
+-- Create the Orion UI
 local Window = OrionLib:MakeWindow({
-    Name = "CamLock Tool",
-    HidePremium = false,
-    IntroText = "Welcome to Camlock Tool!",
+    Name = "Camera Lock UI", 
+    HidePremium = true,
     SaveConfig = true,
-    ConfigFolder = "CamLock_Config",
 })
 
-local MainTab = Window:MakeTab({
-    Name = "Main",
-    Icon = "rbxassetid://4483345998",
-    PremiumOnly = false,
-})
-
--- Spectate Toggle
-MainTab:AddToggle({
-    Name = "Enable Camlock",
-    Default = Xermon.Camlock.Enabled,
-    Callback = function(State)
-        Xermon.Camlock.Enabled = State
-        if not State then
-            target = nil
+-- Create a button in the UI for mobile players to toggle camera lock
+local CameraLockButton = Window:MakeButton({
+    Name = "Toggle Camera Lock",
+    Callback = function()
+        if camlockActive then
+            releaseCameraLock()
+        else
+            if targetPlayer then
+                lockCameraToPlayer(targetPlayer)
+            end
         end
     end
 })
 
--- Spectate Mode Toggle
-MainTab:AddToggle({
-    Name = "Enable Spectate Mode",
-    Default = Xermon.Camlock.Spectate,
-    Callback = function(State)
-        Xermon.Camlock.Spectate = State
-    end
-})
-
--- FOV Circle Toggle
-MainTab:AddToggle({
-    Name = "Show FOV Circle",
-    Default = Xermon.Fov.Visible,
-    Callback = function(State)
-        Xermon.Fov.Visible = State
-    end
-})
-
--- FOV Size Adjuster
-MainTab:AddSlider({
-    Name = "FOV Size",
-    Min = 50,
-    Max = 400,
-    Default = Xermon.Fov.Size,
-    Callback = function(Value)
-        Xermon.Fov.Size = Value
-    end
-})
-
--- FOV Color Picker
-MainTab:AddColorPicker({
-    Name = "FOV Color",
-    Default = Xermon.Fov.Color,
-    Callback = function(Color)
-        Xermon.Fov.Color = Color
-    end
-})
-
--- CamLock Functionality
-local function UpdateCamlock()
-    if Xermon.Camlock.Enabled and target and target.Character then
-        local cameraPosition = Camera.CFrame.Position
-        local targetPosition = target.Character.HumanoidRootPart.Position
-        Camera.CFrame = CFrame.new(cameraPosition, Vector3.new(targetPosition.X, cameraPosition.Y, targetPosition.Z))
+-- Function to lock the camera to a player
+local function lockCameraToPlayer(target)
+    if target and target:FindFirstChild("HumanoidRootPart") then
+        camera.CameraType = Enum.CameraType.Scriptable
+        camera.CFrame = CFrame.new(target.HumanoidRootPart.Position + Vector3.new(0, 5, 0))  -- Slightly above the target
+        camlockActive = true
     end
 end
 
-game:GetService("RunService").RenderStepped:Connect(UpdateCamlock)
+-- Function to release camera lock
+local function releaseCameraLock()
+    camera.CameraType = Enum.CameraType.Custom
+    camlockActive = false
+end
 
--- Target Locking Logic
-local function GetClosestPlayer()
-    local closestPlayer = nil
-    local shortestDistance = math.huge
+-- Detecting player click
+mouse.Button1Click:Connect(function()
+    if not camlockActive then
+        local target = mouse.Target
+        if target and target.Parent and target.Parent:FindFirstChild("Humanoid") then
+            lockCameraToPlayer(target.Parent)
+        end
+    end
+end)
 
-    for _, player in ipairs(Players:GetPlayers()) do
-        if player ~= player and player.Character then
-            for _, part in ipairs(player.Character:GetChildren()) do
-                if part:IsA("BasePart") and part.Transparency ~= 1 then
-                    local viewportPosition, onScreen = Camera:WorldToViewportPoint(part.Position)
-                    local magnitudeDistance = (Vector2.new(viewportPosition.X, viewportPosition.Y) - Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)).Magnitude
-                    if onScreen and magnitudeDistance < shortestDistance and magnitudeDistance <= Xermon.Fov.Size then
-                        closestPlayer = player
-                        shortestDistance = magnitudeDistance
-                    end
+-- Keybind to toggle camera lock
+game:GetService("UserInputService").InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.Keyboard then
+        if input.KeyCode == keybind then
+            if camlockActive then
+                releaseCameraLock()
+            else
+                if targetPlayer then
+                    lockCameraToPlayer(targetPlayer)
                 end
             end
         end
     end
-    return closestPlayer
-end
-
--- Lock Target Button
-MainTab:AddButton({
-    Name = "Lock Target",
-    Callback = function()
-        target = GetClosestPlayer()
-        if target then
-            OrionLib:MakeNotification({
-                Name = "Target Locked",
-                Content = "You are now locked onto " .. target.Name,
-                Image = "rbxassetid://4483345998",
-                Time = 3
-            })
-        else
-            OrionLib:MakeNotification({
-                Name = "No Target Found",
-                Content = "No suitable target in range.",
-                Image = "rbxassetid://4483345998",
-                Time = 3
-            })
-        end
-    end
-})
-
--- Unlock Target Button
-MainTab:AddButton({
-    Name = "Unlock Target",
-    Callback = function()
-        target = nil
-        OrionLib:MakeNotification({
-            Name = "Target Unlocked",
-            Content = "You have unlocked the target.",
-            Image = "rbxassetid://4483345998",
-            Time = 3
-        })
-    end
-})
-
--- Create FOV Circle
-local FOVCircle = Drawing.new("Circle")
-FOVCircle.Visible = Xermon.Fov.Visible
-FOVCircle.Color = Xermon.Fov.Color
-FOVCircle.Transparency = 1
-FOVCircle.Thickness = 1
-FOVCircle.NumSides = 1000000
-FOVCircle.Radius = Xermon.Fov.Size
-FOVCircle.Filled = Xermon.Fov.Filled
-FOVCircle.Position = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
-
-game:GetService("RunService").RenderStepped:Connect(function()
-    FOVCircle.Position = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
-    if Xermon.Fov.Visible then
-        FOVCircle.Visible = true
-    else
-        FOVCircle.Visible = false
-    end
 end)
 
--- Finish setting up the UI
-OrionLib:Init()
-
+-- Show the UI to the player
+OrionLib:MakeNotification({
+    Name = "Camera Lock Enabled",
+    Content = "Press 'C' or click the button to toggle camera lock.",
+    Image = "rbxassetid://6031094471",  -- Example notification image
+    Time = 5
+})
