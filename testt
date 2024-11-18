@@ -222,15 +222,16 @@ oldIndex = hookmetamethod(game, "__index", function(self, key)
     return oldIndex(self, key)
 end)
 
--- Update loop to move FOV circle
 RunService.RenderStepped:Connect(function()
     if SilentAimEnabled and FOVCircle then
-        FOVCircle.Position = UserInputService:GetMouseLocation()
+        -- Set the FOV circle position to the center of the screen
+        FOVCircle.Position = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
     end
     if isLocked then
         updateCamera()
     end
 end)
+
 
 -- OrionLib UI Integration
 Tab:AddTextbox({
@@ -336,103 +337,5 @@ Tab:AddSlider({
             FOVCircle.Radius = FOVRadius
         end
         showNotification("FOV Size Set to " .. tostring(FOVRadius))
-    end    
-})
-
-
-
-
-Tab:AddButton({
-    Name = "C Tool",
-    Callback = function()
-        getgenv().keytoclick = "C"
-        tool = Instance.new("Tool")
-        tool.RequiresHandle = false
-        tool.Name = keytoclick
-        tool.Activated:connect(function()
-            local vim = game:service("VirtualInputManager")
-            vim:SendKeyEvent(true, keytoclick, false, game)
-        end)
-        tool.Parent = game.Players.LocalPlayer.Backpack
-        wait(0.3)
-    end    
-})
-
-Tab:AddButton({
-    Name = "Tp Walk",
-    Callback = function()
-        local function isNumber(str)
-            return tonumber(str) ~= nil or str == 'inf'
-        end
-
-        local tspeed = 1
-        local hb = game:GetService("RunService").Heartbeat
-        local tpwalking = true
-        local player = game:GetService("Players")
-        local lplr = player.LocalPlayer
-        local chr = lplr.Character
-        local hum = chr and chr:FindFirstChildWhichIsA("Humanoid")
-
-        while tpwalking and hb:Wait() and chr and hum and hum.Parent do
-            if hum.MoveDirection.Magnitude > 0 then
-                if tspeed and isNumber(tspeed) then
-                    chr:TranslateBy(hum.MoveDirection * tonumber(tspeed))
-                else
-                    chr:TranslateBy(hum.MoveDirection)
-                end
-            end
-        end
-    end
-})
-
-
-Tab:AddButton({
-	Name = "Resolver (Prevents Anti Locks)",
-	Callback = function()
-      		game:GetService("RunService").Heartbeat:Connect(function()
-        for i, Target in pairs(game:GetService("Players"):GetPlayers()) do
-            if Target ~= game:GetService("Players").LocalPlayer then
-                for i, Part in pairs(Target.Character:GetDescendants()) do
-                    if Part:IsA("BasePart") then
-                            Part.Velocity =
-                                Target.Character.Humanoid.MoveDirection * 16
-                            Part.AssemblyLinearVelocity =
-                                Target.Character.Humanoid.MoveDirection * 16
---[[                    else
-                            Part.Velocity =
-                                Part.Velocity * 0
-                            Part.AssemblyLinearVelocity =
-                                Part.AssemblyLinearVelocity * 0
-                        end]]
-                    end
-                end
-            end
-        end
-    end)
-  	end    
-})
-
-
-Tab:AddToggle({
-    Name = "Auto Air",
-    Default = false,
-    Callback = function(Value)
-        autoAir = Value
-        showNotification("Auto Air " .. (autoAir and "Enabled" or "Disabled"))
-    end    
-})
-
-Tab:AddTextbox({
-    Name = "Set Air Delay",
-    Default = tostring(airDelay),
-    TextDisappear = true,
-    Callback = function(Value)
-        local newAirDelay = tonumber(Value)
-        if newAirDelay then
-            airDelay = newAirDelay
-            showNotification("Air Delay Set to " .. newAirDelay)
-        else
-            showNotification("Invalid Air Delay Value")
-        end
     end    
 })
