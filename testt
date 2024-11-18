@@ -1,80 +1,46 @@
+-- Services
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
 local Camera = workspace.CurrentCamera
 local LocalPlayer = Players.LocalPlayer
-local UserInputService = game:GetService("UserInputService")
-local ScreenGui = Instance.new("ScreenGui")
-local TextButton = Instance.new("TextButton")
+local Mouse = LocalPlayer:GetMouse()
 
-local SilentAimEnabled = false
-local predictionFactor = 0.165
-local FOVSize = 125  -- FOV Size
-local lockBodyPart = "Head" -- Default body part to lock onto
+-- Silent Aim Variables
+local SilentAimEnabled = true
+local FOVRadius = 150  -- Default size of the FOV circle
+local FOVCircle
 
--- Create FOV Circle using Drawing API
-local FOVCircle = Drawing.new("Circle")
-FOVCircle.Thickness = 1
-FOVCircle.NumSides = 100
-FOVCircle.Radius = FOVSize -- Default radius, adjust as needed
-FOVCircle.Filled = false
-FOVCircle.ZIndex = 999
-FOVCircle.Color = Color3.fromRGB(255, 0, 0)  -- Default color red
+-- Create GUI for Mobile Players
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "SilentAimGui"
+screenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
 
--- Create GUI for Silent Aim activation
-ScreenGui.Name = "SilentAimGui"
-ScreenGui.Parent = LocalPlayer.PlayerGui
+local toggleButton = Instance.new("TextButton")
+toggleButton.Name = "ToggleButton"
+toggleButton.Size = UDim2.new(0, 200, 0, 50)
+toggleButton.Position = UDim2.new(0, 10, 0, 10)
+toggleButton.BackgroundColor3 = Color3.fromRGB(255, 0, 0) -- Default color red
+toggleButton.Text = "Silent Aim: OFF"
+toggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+toggleButton.TextSize = 24
+toggleButton.Parent = screenGui
 
-TextButton.Name = "SilentAimButton"
-TextButton.Size = UDim2.new(0, 200, 0, 50)
-TextButton.Position = UDim2.new(0, 10, 0, 10)
-TextButton.BackgroundColor3 = Color3.fromRGB(255, 0, 0)  -- Red when disabled
-TextButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-TextButton.Text = "Silent Aim: OFF"
-TextButton.Parent = ScreenGui
-
--- Update FOV Circle position and color
-local function UpdateFOVCircle()
-    local screenSize = Camera.ViewportSize
-    local center = Vector2.new(screenSize.X / 2, screenSize.Y / 2)
-
-    FOVCircle.Position = center
-    FOVCircle.Color = SilentAimEnabled and Color3.fromRGB(0, 255, 0) or Color3.fromRGB(255, 0, 0)  -- Green if enabled, red if disabled
-end
-
--- Update TextButton based on Silent Aim state
-local function UpdateTextButton()
-    TextButton.BackgroundColor3 = SilentAimEnabled and Color3.fromRGB(0, 255, 0) or Color3.fromRGB(255, 0, 0)
-    TextButton.Text = SilentAimEnabled and "Silent Aim: ON" or "Silent Aim: OFF"
-end
-
--- Raycasting Silent Aim Functions
-local function GetPredictedPosition(character)
-    local rootPart = character:FindFirstChild("HumanoidRootPart")
-    if rootPart then
-        local velocity = rootPart.Velocity
-        return rootPart.Position + (velocity * predictionFactor)
-    end
-    return rootPart.Position
-end
-
+-- Function to get closest player within FOV
 local function GetClosestPlayer()
     local closestPlayer = nil
-    local shortestDistance = math.huge
+    local shortestDistance = FOVRadius
 
     for _, player in ipairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
             local character = player.Character
-            local rootPart = character.HumanoidRootPart
-            local predictedPosition = GetPredictedPosition(character)
-            local ray = Ray.new(Camera.CFrame.Position, (predictedPosition - Camera.CFrame.Position).Unit * 500)
-            local hitPart, hitPosition = workspace:FindPartOnRay(ray, LocalPlayer.Character)
+            local screenPosition, onScreen = Camera:WorldToScreenPoint(character.HumanoidRootPart.Position)
+            local centerPosition = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+            local mouseDistance = (Vector2.new(screenPosition.X, screenPosition.Y) - centerPosition).Magnitude
 
-            if hitPart and hitPart.Parent:FindFirstChild("Humanoid") then
-                local distance = (Camera.CFrame.Position - hitPosition).Magnitude
-                if distance < shortestDistance then
-                    shortestDistance = distance
-                    closestPlayer = player
-                end
+            if mouseDistance < shortestDistance and onScreen then
+                shortestDistance = mouseDistance
+                closestPlayer = player
             end
         end
     end
@@ -82,32 +48,87 @@ local function GetClosestPlayer()
     return closestPlayer
 end
 
--- Hook the Metamethod for raycasting
-local oldIndex
-oldIndex = hookmetamethod(game, "__index", function(self, key)
-    if SilentAimEnabled and key == "Hit" and self == Mouse then
-        local targetPlayer = GetClosestPlayer()
-        if targetPlayer and targetPlayer.Character then
-            local predictedPosition = GetPredictedPosition(targetPlayer.Character)
-            return CFrame.new(predictedPosition)
+-- Function to get predicted position of a player
+local function GetPredictedPosition(character)
+    local rootPart = character:FindFirstChild("HumanoidRootPart")
+    if rootPart then
+        local velocity = rootPart.Velocity
+        return rootPart.Position + (velocity * 0.165)  -- Adjust prediction factor as needed
+    end
+    return rootPart.Position
+end
+
+-- Create FOV Circle for visualization
+if SilentAimEnabled then
+    FOVCircle = Drawing.new("Circle")
+    FOVCircle.Thickness = 1
+    FOVCircle.NumSides = 100
+    FOVCircle.Radius = FOVRadius
+    FOVCircle.Filled = false
+    FOVCircle.ZIndex = 999
+    FOVCircle.Color = Color3.fromRGB(255, 0, 0)
+    FOVCircle.Position = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)  -- Center the circle
+end
+
+-- Update FOV circle position
+RunService.RenderStepped:Connect(function()
+    if SilentAimEnabled and FOVCircle then
+        FOVCircle.Position = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+    end
+end)
+
+-- Toggle Silent Aim function
+local function ToggleSilentAim(enabled)
+    SilentAimEnabled = enabled
+    if SilentAimEnabled then
+        if not FOVCircle then
+            FOVCircle = Drawing.new("Circle")
+            FOVCircle.Thickness = 1
+            FOVCircle.NumSides = 100
+            FOVCircle.Radius = FOVRadius
+            FOVCircle.Filled = false
+            FOVCircle.ZIndex = 999
+            FOVCircle.Color = Color3.fromRGB(255, 0, 0)
+            FOVCircle.Position = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+        end
+        FOVCircle.Visible = true
+        toggleButton.BackgroundColor3 = Color3.fromRGB(0, 255, 0) -- Green
+        toggleButton.Text = "Silent Aim: ON"
+    else
+        if FOVCircle then
+            FOVCircle.Visible = false
+        end
+        toggleButton.BackgroundColor3 = Color3.fromRGB(255, 0, 0) -- Red
+        toggleButton.Text = "Silent Aim: OFF"
+    end
+end
+
+-- Handle button click for toggling Silent Aim
+toggleButton.MouseButton1Click:Connect(function()
+    ToggleSilentAim(not SilentAimEnabled)
+end)
+
+-- Detect ShiftLock and adjust mouse hit target for Silent Aim
+UserInputService.InputChanged:Connect(function(input)
+    if SilentAimEnabled and input.UserInputType == Enum.UserInputType.MouseMovement then
+        -- Check if ShiftLock is active
+        if UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter then
+            -- Using the camera direction when ShiftLock is active
+            local targetPlayer = GetClosestPlayer()
+            if targetPlayer and targetPlayer.Character then
+                local predictedPosition = GetPredictedPosition(targetPlayer.Character)
+                -- Aim at predicted target based on camera direction
+                local aimPosition = Camera.CFrame:PointToWorldSpace(predictedPosition)
+                Mouse.Hit = CFrame.new(aimPosition)  -- Aim at predicted target when ShiftLock is on
+            end
+        else
+            -- If ShiftLock is off, use the Mouse.Hit for normal aim
+            local targetPlayer = GetClosestPlayer()
+            if targetPlayer and targetPlayer.Character then
+                local predictedPosition = GetPredictedPosition(targetPlayer.Character)
+                local aimPosition = Camera.CFrame:PointToWorldSpace(predictedPosition)
+                Mouse.Hit = CFrame.new(aimPosition)
+            end
         end
     end
-    return oldIndex(self, key)
-end)
-
--- Input handling for Silent Aim activation
-TextButton.MouseButton1Click:Connect(function()
-    SilentAimEnabled = not SilentAimEnabled
-    UpdateTextButton()
-    if SilentAimEnabled then
-        print("Silent Aim Enabled")
-    else
-        print("Silent Aim Disabled")
-    end
-end)
-
--- Update loop for FOV circle
-RunService.RenderStepped:Connect(function()
-    -- Update FOV circle position and color
-    UpdateFOVCircle()
 end)
