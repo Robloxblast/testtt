@@ -7,7 +7,7 @@ local LocalPlayer = Players.LocalPlayer
 local Mouse = LocalPlayer:GetMouse()
 
 -- Silent Aim Variables
-local SilentAimEnabled = enable
+local SilentAimEnabled = true
 local FOVRadius = 150  -- Default size of the FOV circle
 local FOVCircle
 
@@ -119,4 +119,18 @@ end
 -- Handle button click for toggling Silent Aim
 toggleButton.MouseButton1Click:Connect(function()
     ToggleSilentAim(not SilentAimEnabled)
+end)
+
+-- Detect ShiftLock and adjust mouse hit target for Silent Aim
+UserInputService.InputChanged:Connect(function(input)
+    if SilentAimEnabled and input.UserInputType == Enum.UserInputType.MouseMovement then
+        -- Adjust based on ShiftLock state
+        if UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter then
+            local targetPlayer = GetClosestPlayer()
+            if targetPlayer and targetPlayer.Character then
+                local predictedPosition = GetPredictedPosition(targetPlayer.Character)
+                Mouse.Hit = CFrame.new(predictedPosition)  -- Aim at predicted target when ShiftLock is on
+            end
+        end
+    end
 end)
